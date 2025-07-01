@@ -1,9 +1,9 @@
-flask==3.0.2
-python-dotenv==1.0.0
-google-generativeai==0.3.2
-sqlite3==2.6.0  # Usually included in Python, but explicitly listing it
-pyMuPDF==1.23.8
-Pillow==10.1.0  # Required by PyMuPDF
-pymupdf==1.23.8  # Alternative package name for PyMuPDF
-email-validator==2.0.0
-gunicorn==21.2.0  # Production WSGI server
+flask
+python-dotenv
+google-generativeai
+sqlite3
+pyMuPDF
+Pillow
+pymupdf
+email-validator
+gunicorn
