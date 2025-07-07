@@ -3,7 +3,7 @@ import random
 import time
 import google.generativeai as genai
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
 import sqlite3
@@ -11,7 +11,9 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import fitz  # PyMuPDF
-from datetime import datetime
+from io import BytesIO
+from email.mime.application import MIMEApplication
+import string
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key_here'
@@ -35,7 +37,6 @@ except Exception as e:
     print(f"❌ Error configuring Gemini API: {e}")
     model = None  # Explicit fallback to None
 
-
 # Database initialization
 def init_db():
     conn = sqlite3.connect('quiz_app.db')
@@ -49,7 +50,18 @@ def init_db():
             contact TEXT,
             address TEXT,
             password TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            is_verified BOOLEAN DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS otps (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL,
+            otp TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (email) REFERENCES users(email)
         )
     ''')
     
@@ -63,11 +75,101 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+# Helper functions
+def generate_otp():
+    """Generate a 6-digit OTP"""
+    return ''.join(random.choices(string.digits, k=6))
+
+def send_otp_email(receiver_email, otp):
+    """Send OTP to user's email"""
+    sender_email = os.getenv('GMAIL_USER')
+    app_password = os.getenv('GMAIL_APP_PASSWORD')
+    
+    if not sender_email or not app_password:
+        print("⚠️ Warning: Email credentials not configured!")
+        return False
+    
+    try:
+        msg = MIMEMultipart()
+        msg["From"] = sender_email
+        msg["To"] = receiver_email
+        msg["Subject"] = "Your QuizMaster Verification Code"
+        
+        body = f"""Hello,
+        
+Your verification code for QuizMaster is: {otp}
+        
+This code will expire in 10 minutes.
+        
+If you didn't request this, please ignore this email.
+"""
+        msg.attach(MIMEText(body, "plain"))
+        
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(sender_email, app_password)
+            server.sendmail(sender_email, receiver_email, msg.as_string())
+        
+        print(f"✅ OTP sent to {receiver_email}")
+        return True
+    
+    except Exception as e:
+        print(f"❌ Error sending OTP email: {str(e)}")
+        return False
+
+def is_otp_valid(email, otp):
+    """Check if OTP is valid and not expired"""
+    conn = get_db_connection()
+    try:
+        # Lowercase email to avoid mismatches
+        email = email.lower().strip()
+        otp = str(otp).strip()
+        
+        # Get most recent OTP for this email
+        otp_record = conn.execute('''
+            SELECT * FROM otps 
+            WHERE email = ?
+            ORDER BY created_at DESC 
+            LIMIT 1
+        ''', (email,)).fetchone()
+        
+        if not otp_record:
+            print(f"DEBUG: No OTP found for email: {email}")
+            return False
+        
+        db_otp = str(otp_record['otp']).strip()
+        if db_otp != otp:
+            print(f"DEBUG: OTP mismatch. DB: {db_otp}, Input: {otp}")
+            return False
+        
+        # Parse datetime correctly
+        created_at = otp_record['created_at']
+        if isinstance(created_at, str):
+            try:
+                created_at = datetime.strptime(created_at, '%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                created_at = datetime.fromisoformat(created_at)
+        
+        # Check expiry
+        time_elapsed = datetime.utcnow() - created_at
+        if time_elapsed > timedelta(minutes=10):
+            print("DEBUG: OTP expired")
+            return False
+        
+        return True
+        
+    except Exception as e:
+        print(f"ERROR in is_otp_valid: {str(e)}")
+        return False
+    finally:
+        conn.close()
+
+
+# Routes
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
         name = request.form['name']
-        email = request.form['email']
+        email = request.form['email'].lower().strip()
         contact = request.form['contact']
         address = request.form['address']
         password = request.form['password']
@@ -79,19 +181,101 @@ def register():
         
         conn = get_db_connection()
         try:
+            # Check if email exists (even unverified)
+            existing_user = conn.execute('SELECT * FROM users WHERE email = ?', (email,)).fetchone()
+            
+            if existing_user:
+                if existing_user['is_verified']:
+                    flash('Email already exists!', 'error')
+                    return redirect(url_for('register'))
+                else:
+                    # Delete unverified user and old OTPs
+                    conn.execute('DELETE FROM users WHERE email = ?', (email,))
+                    conn.execute('DELETE FROM otps WHERE email = ?', (email,))
+                    conn.commit()
+            
+            # Insert new user as unverified
             conn.execute('''
-                INSERT INTO users (name, email, contact, address, password) 
-                VALUES (?, ?, ?, ?, ?)
-            ''', (name, email, contact, address, password))  # Storing plain password
+                INSERT INTO users (name, email, contact, address, password, is_verified) 
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (name, email, contact, address, password, False))
+            
+            # Generate and store OTP (delete old ones first)
+            conn.execute('DELETE FROM otps WHERE email = ?', (email,))
+            otp = generate_otp()
+            conn.execute('INSERT INTO otps (email, otp) VALUES (?, ?)', (email, otp))
+            
             conn.commit()
-            flash('Registration successful! Please login.', 'success')
-            return redirect(url_for('login'))
-        except sqlite3.IntegrityError:
-            flash('Email already exists!', 'error')
+            
+            # Send OTP email
+            if send_otp_email(email, otp):
+                flash('Registration successful! Please check your email for the verification code.', 'success')
+                session['pending_email'] = email
+                return redirect(url_for('verify_email'))
+            else:
+                flash('Failed to send verification email. Please try again.', 'error')
+                return redirect(url_for('register'))
+                
+        except Exception as e:
+            flash('An error occurred during registration. Please try again.', 'error')
+            print(f"Registration error: {str(e)}")
+            return redirect(url_for('register'))
         finally:
             conn.close()
     
     return render_template('register.html')
+
+@app.route('/verify-email', methods=['GET', 'POST'])
+def verify_email():
+    if 'pending_email' not in session:
+        return redirect(url_for('register'))
+    
+    if request.method == 'POST':
+        otp = request.form['otp']
+        email = session['pending_email']
+        
+        if is_otp_valid(email, otp):
+            # Mark user as verified and clean up OTPs
+            conn = get_db_connection()
+            try:
+                conn.execute('UPDATE users SET is_verified = 1 WHERE email = ?', (email,))
+                conn.execute('DELETE FROM otps WHERE email = ?', (email,))
+                conn.commit()
+                
+                flash('Email verified successfully! You can now login.', 'success')
+                session.pop('pending_email', None)
+                return redirect(url_for('login'))
+            finally:
+                conn.close()
+        else:
+            flash('Invalid or expired OTP. Please try again.', 'error')
+    
+    return render_template('verify_email.html')
+
+@app.route('/resend-otp')
+def resend_otp():
+    if 'pending_email' not in session:
+        return redirect(url_for('register'))
+    
+    email = session['pending_email']
+    otp = generate_otp()
+    
+    conn = get_db_connection()
+    try:
+        # Delete old OTPs first
+        conn.execute('DELETE FROM otps WHERE email = ?', (email,))
+        conn.execute('INSERT INTO otps (email, otp) VALUES (?, ?)', (email, otp))
+        conn.commit()
+        
+        if send_otp_email(email, otp):
+            flash('New verification code sent! Please check your email.', 'success')
+        else:
+            flash('Failed to resend verification code. Please try again.', 'error')
+    finally:
+        conn.close()
+    
+    return redirect(url_for('verify_email'))
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -144,88 +328,46 @@ def start_quiz(quiz_type):
 def generate_quiz(quiz_type, difficulty):
     # Generate questions based on quiz type and difficulty using Gemini
     prompt = f"""
-    Generate a {difficulty} difficulty {quiz_type} quiz with exactly 15 multiple choice questions.
+    You are a quiz generator. Generate exactly 15 multiple choice questions in valid JSON format for the following inputs:
 
-    - If the quiz type is "Logical Reasoning":
-        Topics to focus on:
-        - Time, Speed, and Distance
-        - Ratio and Proportion
-        - Blood Relations
-        - Age Problems
-        - Coding-Decoding
-        - Number Series
-        - Directions and Ages
-        
+    Quiz Type: {quiz_type}  
+    Difficulty: {difficulty}  
 
-        Difficulty behavior:
-        - Easy: Questions based on direct logic, single-variable reasoning, or clearly defined patterns. Involves simple calculations or one-step deductions with minimal abstraction.
-        - Medium: Involves multi-step reasoning, moderate complexity, or a mix of logical concepts. May include conditional logic, pattern recognition, or interdependent variables requiring structured thinking.
-        - Hard: Complex puzzles involving layered logic, abstract patterns, multi-variable dependencies, and multi-step deductions. Requires advanced reasoning skills, critical thinking, and deep analysis to arrive at the correct conclusion.
+    Each question must contain:
+    - "id": Question number (1 to 15)
+    - "text": A clearly stated question
+    - "options": A list of 4 plausible answer choices (A, B, C, D)
+    - "answer": The correct option string
+    - "explanation": A brief justification of the correct answer
 
-    - If the quiz type is "Technical":
-        Topics to include:
-        - Python and Java programming concepts
-        - Data Structures and Algorithms
-        - Databases (SQL, NoSQL)
-        - Operating Systems
-        - Networking basics
-        - Object-Oriented Programming
-
-        Difficulty behavior:
-        - Easy: Basic definitions, simple syntax, general theory questions.
-        - Medium: Code output predictions, logic traceability, moderate SQL or data structure usage.
-        - Hard: Conceptual edge cases, algorithm complexity, multi-threaded logic, deep analysis.
-
-    - If the quiz type is "English":
-        Topics to include:
-        - Grammar and Sentence Correction
-        - Vocabulary and Word Usage
-        - Synonyms and Antonyms
-        - Fill in the blanks
-        - Reading Comprehension (short passages)
-
-        Difficulty behavior:
-        - Easy: Basic grammar corrections, vocabulary matching, direct synonym/antonym.
-        - Medium: Spotting errors in slightly complex sentences, improving phrasing.
-        - Hard: Nuanced grammar, paragraph-based comprehension, idioms, tone, intent analysis.
-
-    - If the quiz type is "General Knowledge":
-        Topics to include:
-        - Indian and World Geography
-        - History and Politics
-        - Recent Current Affairs
-        - Science and Technology (general awareness)
-        - Sports and Culture
-        - Important Days and Events
-        - Awards and Honours
-
-        Difficulty behavior:
-        - Easy: Static facts (e.g., capitals, rivers, historical years, basic events).
-        - Medium: Associations, event relevance, intermediate-level current affairs.
-        - Hard: Multi-fact reasoning, up-to-date global/current events, complex international themes.
-
-    Each question must include:
-    - A clear and concise question
-    - 4 plausible options (only one correct answer)
-    - The correct answer marked
-    - A short explanation justifying the correct answer
-
-    Return ONLY valid JSON formatted like this:
+    Return ONLY valid JSON:
     {{
-        "questions": [
-            {{
-                "id": "1",
-                "text": "Question text here?",
-                "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
-                "answer": "Correct option",
-                "explanation": "Brief explanation of why this is correct"
-            }},
-            ...
-        ]
+    "questions": [
+        {{
+        "id": "1",
+        "text": "Your question here?",
+        "options": ["A", "B", "C", "D"],
+        "answer": "Correct Option",
+        "explanation": "Why this is the correct answer."
+        }},
+        ...
+    ]
     }}
 
-    Ensure the JSON is properly formatted and can be parsed by Python's json module.
-    """
+    ### Difficulty Definitions (enforced for **all 15 questions**):
+    - Easy: Each question must require **only 1 logical step** (e.g., direct calculation, definition, simple pattern).
+    - Medium: Each question must require **exactly 3 logical reasoning steps** to solve. Avoid 1-step or 2-step questions.
+    - Hard: Each question must require **4 or more logical steps**, involving complex reasoning, abstraction, or multi-layered analysis. No simplification.
+
+    ### Quiz Type Definitions:
+    - Logical Reasoning: Focus on Time-Speed-Distance, Blood Relations, Coding-Decoding, Directions, Number Series, Age, and Ratios.
+    - Technical: Topics include Python/Java programming, Data Structures, Databases, OOP, OS, Networking.
+    - English: Grammar, Vocabulary, Sentence Correction, Idioms, Comprehension.
+    - General Knowledge: Static facts, History, Geography, Current Affairs, Science, Awards.
+
+    ### Output Rules:
+    - All 15 questions must match the selected difficulty level in reasoning complexity.
+    - Return only clean JSON output, no Markdown or comments outside the JSON block. """
 
     
     try:
@@ -373,7 +515,10 @@ def generate_and_email_results(receiver_email, quiz_data, score, results, time_t
         
         # --- Page 1: Cover Page ---
         page1 = doc.new_page()
-        
+        # Insert logo on page1
+        logo_rect = fitz.Rect(450, 30, 520, 90)  # X, Y position and size
+        page1.insert_image(logo_rect, filename="logo.jpeg")
+
         # Title
         page1.insert_text(
             fitz.Point(50, 100),
@@ -405,11 +550,14 @@ def generate_and_email_results(receiver_email, quiz_data, score, results, time_t
                 color=(0, 0, 0))
         
         # Decorative element
-        page1.draw_circle(fitz.Point(500, 100), 30, color=(0.2, 0.5, 0.8))
+        #page1.draw_circle(fitz.Point(500, 100), 30, color=(0.2, 0.5, 0.8))
         
         # --- Page 2: Detailed Results ---
         page2 = doc.new_page()
-        
+        # Insert logo on page2
+        logo_rect = fitz.Rect(450, 30, 520, 90)
+        page2.insert_image(logo_rect, filename="logo.jpeg")
+
         # Page Title
         page2.insert_text(
             fitz.Point(50, 50),
@@ -473,6 +621,9 @@ def generate_and_email_results(receiver_email, quiz_data, score, results, time_t
                 page2 = doc.new_page()
                 y_position = 50
         
+
+
+        
         # Save PDF to memory buffer
         pdf_buffer = BytesIO()
         doc.save(pdf_buffer)
@@ -533,7 +684,8 @@ def show_results(session_id):
     score = 0
     results = []
     for question in quiz_data['questions']:
-        user_answer = quiz_data['answers'].get(question['id'])
+        user_answer = quiz_data['answers'].get(str(question['id']))  # Convert ID to string
+
         is_correct = user_answer == question['answer']
         if is_correct:
             score += 1
