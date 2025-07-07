@@ -216,6 +216,26 @@
                 gap: 15px;
             }
         }
+        .correct-answer {
+    color: green;
+    font-weight: bold;
+}
+
+.user-answer-correct {
+    color: green;
+    font-weight: bold;
+    background-color: #e6ffe6;
+    border-radius: 5px;
+    padding: 4px;
+}
+
+.user-answer-incorrect {
+    color: red;
+    background-color: #ffe6e6;
+    border-radius: 5px;
+    padding: 4px;
+}
+
     </style>
 </head>
 <body>
@@ -263,18 +283,28 @@
                 <div class="question-text">Q{{ loop.index }}: {{ result.question }}</div>
                 
                 <ul class="options-list">
-                    {% for option in result.options %}
-                    <li class="{% if option == result.correct_answer %}correct-answer{% elif option == result.user_answer and not result.is_correct %}user-answer-incorrect{% endif %}">
-                        {{ option }}
-                        {% if option == result.correct_answer %}
-                        <i class="fas fa-check" style="margin-left: 8px;"></i>
-                        {% elif option == result.user_answer and not result.is_correct %}
-                        <i class="fas fa-times" style="margin-left: 8px;"></i>
-                        {% endif %}
-                    </li>
-                    {% endfor %}
-                </ul>
-                
+    {% for option in result.options %}
+    <li class="
+        {% if option == result.correct_answer and option == result.user_answer %}
+            user-answer-correct
+        {% elif option == result.correct_answer %}
+            correct-answer
+        {% elif option == result.user_answer and not result.is_correct %}
+            user-answer-incorrect
+        {% endif %}
+    ">
+        {{ option }}
+        {% if option == result.correct_answer and option == result.user_answer %}
+        <i class="fas fa-check" style="margin-left: 8px; color: green;"></i>
+        {% elif option == result.correct_answer %}
+        <i class="fas fa-check" style="margin-left: 8px;"></i>
+        {% elif option == result.user_answer and not result.is_correct %}
+        <i class="fas fa-times" style="margin-left: 8px; color: red;"></i>
+        {% endif %}
+    </li>
+    {% endfor %}
+</ul>
+
                 <div class="explanation">
                     <strong>Explanation:</strong> {{ result.explanation }}
                 </div>
