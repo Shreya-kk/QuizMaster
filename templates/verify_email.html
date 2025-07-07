@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Email - QuizMaster</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        /* Use the same styling as your register page */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #dadfe6;
+            color: #e6f1ff;
+        }
+        .auth-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px 0;
+            position: relative;
+        }
+        .auth-card {
+            background-color: #172a45;
+            padding: 2.5rem;
+            border-radius: 12px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            width: 100%;
+            max-width: 450px;
+            z-index: 2;
+            border: 1px solid #1e3a8a;
+        }
+        .auth-header h2 {
+            margin: 0;
+            font-size: 2rem;
+            color: #ffffff;
+        }
+        .auth-header p {
+            margin-top: 0.5rem;
+            color: #ccd6f6;
+        }
+        .form-group {
+            margin-bottom: 1.2rem;
+        }
+        .auth-form input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #1e3a8a;
+            border-radius: 8px;
+            background-color: #0a192f;
+            color: #ffffff;
+            outline: none;
+        }
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            border: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+        .btn-primary {
+            background-color: #1e3a8a;
+            color: #ffffff;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <h2>Verify Your Email</h2>
+                <p>We've sent a 6-digit code to your email address</p>
+            </div>
+            
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            
+            <form action="{{ url_for('verify_email') }}" method="POST" class="auth-form">
+                <div class="form-group">
+                    <label for="otp">Verification Code</label>
+                    <input type="text" id="otp" name="otp" pattern="\d{6}" maxlength="6" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Verify Email</button>
+            </form>
+            
+            <div class="auth-footer">
+                <p>Didn't receive the code? <a href="{{ url_for('resend_otp') }}">Resend OTP</a></p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

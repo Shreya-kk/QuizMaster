@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz App - Register</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        /* General reset and font */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #dadfe6; /* Dark blue background */
+            color: #e6f1ff; /* Light blue text */
+        }
+
+        /* Container for the auth section */
+        .auth-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px 0;
+            position: relative;
+        }
+
+        /* Card styling */
+        .auth-card {
+            background-color: #172a45; /* Dark blue card */
+            padding: 2.5rem;
+            border-radius: 12px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            width: 100%;
+            max-width: 450px;
+            z-index: 2;
+            border: 1px solid #1e3a8a; /* Blue border */
+        }
+
+        /* Header */
+        .auth-header h2 {
+            margin: 0;
+            font-size: 2rem;
+            color: #ffffff;
+        }
+
+        .auth-header p {
+            margin-top: 0.5rem;
+            color: #ccd6f6; /* Light blue text */
+        }
+
+        /* Alerts */
+        .alert {
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 1rem;
+        }
+
+        .alert-success {
+            background-color: #2e7d32;
+            color: #d0f0d0;
+        }
+
+        .alert-error, .alert-danger {
+            background-color: #c62828;
+            color: #ffdada;
+        }
+
+        /* Form */
+        .auth-form .form-group {
+            margin-bottom: 1.2rem;
+        }
+
+        .auth-form label {
+            display: block;
+            margin-bottom: 0.4rem;
+            color: #e6f1ff; /* Light blue text */
+        }
+
+        .auth-form input,
+        .auth-form textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #1e3a8a; /* Blue border */
+            border-radius: 8px;
+            background-color: #0a192f; /* Dark blue background */
+            color: #ffffff;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .auth-form input:focus,
+        .auth-form textarea:focus {
+            border-color: #64ffda; /* Teal accent */
+            box-shadow: 0 0 0 2px rgba(100, 255, 218, 0.2);
+        }
+
+        /* Button */
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            border: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+
+        .btn-primary {
+            background-color: #1e3a8a; /* Dark blue button */
+            color: #ffffff;
+            font-weight: bold;
+        }
+
+        .btn-primary:hover {
+            background-color: #23395d;
+            transform: translateY(-2px);
+        }
+.btn-secondary {
+    background-color: transparent;
+    color: #64ffda; /* Teal accent */
+    border: 1px solid #64ffda;
+    margin-top: 1rem;
+    padding: 8px 16px; /* Reduced padding */
+    font-size: 0.9rem; /* Slightly smaller font */
+    display: inline-block; /* Change from default button display */
+    width: auto; /* Override the 100% width from .btn */
+    text-align: center;
+    line-height: 1.2;
+}
+        .btn-secondary:hover {
+            background-color: rgba(100, 255, 218, 0.1);
+        }
+
+        /* Footer */
+        .auth-footer {
+            margin-top: 1.5rem;
+            text-align: center;
+        }
+
+        .auth-footer p {
+            color: #ccd6f6;
+        }
+
+        .auth-footer a {
+            color: #64ffda; /* Teal accent */
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .auth-footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* Decorative Circles */
+        .auth-decoration {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            z-index: 0;
+        }
+
+        .decoration-circle {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(30, 58, 138, 0.1); /* Dark blue circles */
+            animation: float 10s infinite ease-in-out;
+        }
+
+        .decoration-circle:nth-child(1) {
+            width: 120px;
+            height: 120px;
+            top: 10%;
+            left: 10%;
+        }
+
+        .decoration-circle:nth-child(2) {
+            width: 200px;
+            height: 200px;
+            bottom: 15%;
+            right: 15%;
+        }
+
+        .decoration-circle:nth-child(3) {
+            width: 150px;
+            height: 150px;
+            top: 50%;
+            right: 20%;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-20px); }
+        }
+
+        /* Error messages */
+        small[style*="color:red"] {
+            color: #ff5555 !important;
+            display: block;
+            margin-top: 5px;
+            font-size: 0.8rem;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 480px) {
+            .auth-card {
+                padding: 1.5rem;
+                margin: 0 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <h2>Create an Account</h2>
+                <p>Join QuizMaster to start practicing quizzes</p>
+            </div>
+            
+            <form action="{{ url_for('register') }}" method="POST" class="auth-form">
+                <div class="form-group">
+                    <label for="name">Full Name</label>
+                    <input type="text" id="name" name="name" required>
+                </div>
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required>
+                    <small style="color:red; display:none;" id="email-error">Enter a valid email address</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="contact">Contact Number</label>
+                    <input type="text" id="contact" name="contact" pattern="\d{10}" maxlength="10" required>
+                    <small style="color:red; display:none;" id="contact-error">Enter a valid 10-digit number</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="address">Address</label>
+                    <textarea id="address" name="address" rows="2"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                <div class="form-group">
+                    <label for="confirm_password">Confirm Password</label>
+                    <input type="password" id="confirm_password" name="confirm_password" required>
+                </div>
+                <button type="submit" class="btn btn-primary">Register</button>
+            </form>
+            
+            <div class="auth-footer">
+                <p>Already have an account? <a href="{{ url_for('login') }}">Login here</a></p>
+                <a href="{{ url_for('home') }}" class="btn btn-secondary">← Back to Home</a>
+            </div>
+        </div>
+        
+        <div class="auth-decoration">
+            <div class="decoration-circle"></div>
+            <div class="decoration-circle"></div>
+            <div class="decoration-circle"></div>
+        </div>
+    </div>
+    
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const form = document.querySelector(".auth-form");
+
+            form.addEventListener("submit", function (e) {
+                let isValid = true;
+                let name = document.getElementById("name").value.trim();
+                let email = document.getElementById("email").value.trim();
+                let contact = document.getElementById("contact").value.trim();
+                let password = document.getElementById("password").value;
+                let confirmPassword = document.getElementById("confirm_password").value;
+
+                // Name validation
+                if (!/^[A-Za-z\s]+$/.test(name)) {
+                    alert("Name must contain only letters and spaces.");
+                    isValid = false;
+                }
+
+                // Email validation
+                if (!/^\S+@\S+\.\S+$/.test(email)) {
+                    alert("Enter a valid email address.");
+                    isValid = false;
+                }
+
+                // Contact number validation (optional field)
+                if (contact && !/^\d{10}$/.test(contact)) {
+                    alert("Contact number must be exactly 10 digits.");
+                    isValid = false;
+                }
+
+                // Password length
+                if (password.length < 6) {
+                    alert("Password must be at least 6 characters long.");
+                    isValid = false;
+                }
+
+                // Password match
+                if (password !== confirmPassword) {
+                    alert("Passwords do not match.");
+                    isValid = false;
+                }
+
+                if (!isValid) {
+                    e.preventDefault(); // Prevent form submission
+                }
+            });
+
+            document.getElementById("contact").addEventListener("input", function () {
+                const contactInput = this;
+                const errorMsg = document.getElementById("contact-error");
+                const isValid = /^\d{10}$/.test(contactInput.value);
+
+                if (!isValid && contactInput.value.length > 0) {
+                    errorMsg.style.display = "block";
+                } else {
+                    errorMsg.style.display = "none";
+                }
+            });
+
+            document.getElementById("email").addEventListener("input", function () {
+                const emailInput = this;
+                const errorMsg = document.getElementById("email-error");
+                const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+                if (!emailPattern.test(emailInput.value) && emailInput.value.length > 0) {
+                    errorMsg.style.display = "block";
+                } else {
+                    errorMsg.style.display = "none";
+                }
+            });
+        });
+    </script>
+</body>
+</html>
